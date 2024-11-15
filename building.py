@@ -6,7 +6,7 @@ class Building:
         :param floors: Total number of floors in the building. If not in layout with as a default number.
         """
         self.layout = layout["nodes"]
-        if layout["flores"]:
+        if layout["floors"]:
             self.floors = layout["floors"]
         else:
             self.floors=1
