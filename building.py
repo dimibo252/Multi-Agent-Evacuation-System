@@ -3,22 +3,42 @@ from collections import deque
 
 
 class Room:
-    def __init__(self, room_type, row, col):
+    def __init__(self, room_type, row, col, floor):
         self.room_type = room_type  # H (Hallway), S (Store), R (Restroom)
         self.row = row
         self.col = col
+        self.floor = floor
         self.connections = []  # Rooms that agents can travel through from this one
         self.elevators = []  # Elevator connections to other floors
-        self.staircases = []  # Staircase connections to other floors
-
+        self.staircases = [] # Staircase connections to other floors
+        self.emergency_staircases = []
+        self.fire = False
+        self.unavailable = False #for earthquakes or security threath, for example
+     
+    def security_threath(self):
+        self.unavailable=True
+            
+    def earthquake(self):
+        if random.random( ) < 0.5: #50% of getting damaged because there are earthquakes stronger than others
+            self.unvailable = True
+            
+    def fires(self):
+        self.fire = True
+        for connection in self.connections:
+            if random.random() < 0.05: #5% chance of fire in each connection
+                connection.fire()
+                
     def connection(self, to_room):
         self.connections.append(to_room)
 
     def elevator(self, to_room):
         self.elevators.append(to_room)
 
-    def stairs(self, to_room):
-        self.staircases.append(to_room)
+    def stairs(self, to_room, is_emergency):
+        if is_emergency:
+            self.emergency_staircases.append(to_room)
+        else:
+            self.staircases.append(to_room)
 
 class Building:
     def __init__(self, floors, rows, cols, building_type="shopping_mall"):
@@ -28,30 +48,31 @@ class Building:
         self.building_type = building_type
         self.layout = self.generate_building_layout()
         self.add_vertical_connections()
-        self.validate_layout()
+        self.add_exits_and_connections()
+        self.update_room_connections()
 
     def generate_building_layout(self):
         layout = []
         for floor in range(self.floors):
             floor_layout = [[None for _ in range(self.cols)] for _ in range(self.rows)]
-            self.place_rooms(floor_layout)
+            self.place_rooms(floor_layout,floor)
             layout.append(floor_layout)
         return layout
 
-    def place_rooms(self, floor_layout):
+    def place_rooms(self, floor_layout,floor):
         for i in range(self.rows):
             for j in range(self.cols):
                 if random.random() < 0.6:  # 60% chance for Hallway
-                    floor_layout[i][j] = Room("H", i, j)
-                elif random.random() < 0.9:  # 30% chance for Store
-                    floor_layout[i][j] = Room("S", i, j)
-                else:  # 10% chance for Restroom
-                    floor_layout[i][j] = Room("R", i, j)
+                    floor_layout[i][j] = Room("H", i, j,floor)
+                elif random.random() < 0.8:  # 20% chance for Store
+                    floor_layout[i][j] = Room("S", i, j,floor)
+                else:  # 20% chance for Restroom
+                    floor_layout[i][j] = Room("R", i, j,floor)
 
-        self.ensure_store_restroom_access(floor_layout)
-        self.ensure_hallway_connectivity(floor_layout)
+        self.ensure_store_restroom_access(floor_layout,floor)
+        self.ensure_hallway_connectivity(floor_layout,floor)
 
-    def ensure_hallway_connectivity(self, floor_layout):
+    def ensure_hallway_connectivity(self, floor_layout,floor):
         """
         Ensures all hallway ('H') tiles on a floor are connected.
         Any hallway tile must be reachable from any other hallway tile.
@@ -129,13 +150,13 @@ class Building:
                     c1 += 1
                 elif c1 > c2:
                     c1 -= 1
-                floor_layout[r1][c1] = Room("H", r1, c1)
+                floor_layout[r1][c1] = Room("H", r1, c1, floor)
 
             # Merge the connected component into the largest component
             largest_component.update(closest_component)
             connected_components.remove(closest_component)
 
-    def ensure_store_restroom_access(self, floor_layout):
+    def ensure_store_restroom_access(self, floor_layout, floor):
         """
         Ensures every store ('S') and restroom ('R') is adjacent to at least one hallway ('H').
         """
@@ -151,7 +172,8 @@ class Building:
                         for dx, dy in [(-1, 0), (1, 0), (0, -1), (0, 1)]
                     )
                     if not connected_to_hallway:
-                        # Add a hallway next to it
+                        # Try to add a hallway next to it
+                        added_hallway = False
                         for dx, dy in [(-1, 0), (1, 0), (0, -1), (0, 1)]:
                             nx, ny = i + dx, j + dy
                             if (
@@ -159,15 +181,40 @@ class Building:
                                 and 0 <= ny < self.cols
                                 and floor_layout[nx][ny] is None
                             ):
-                                floor_layout[nx][ny] = Room("H", nx, ny)
+                                floor_layout[nx][ny] = Room("H", nx, ny, floor)
+                                added_hallway = True
                                 break
+
+                        # If no empty space, replace an adjacent non-hallway room
+                        if not added_hallway:
+                            for dx, dy in [(-1, 0), (1, 0), (0, -1), (0, 1)]:
+                                nx, ny = i + dx, j + dy
+                                if (
+                                    0 <= nx < self.rows
+                                    and 0 <= ny < self.cols
+                                    and floor_layout[nx][ny]
+                                    and floor_layout[nx][ny].room_type in {"S", "R"}
+                                ):
+                                    floor_layout[nx][ny] = Room("H", nx, ny, floor)
+                                    break
 
 
     def add_vertical_connections(self):
+        """
+        Adds normal stairs, emergency stairs, and elevators connecting all floors.
+        - Normal stairs are unique per floor.
+        - Emergency stairs are fixed in the same position across all floors.
+        - Elevators allow movement between any two floors.
+        """
+        # Position for emergency stairs (fixed across floors)
+        emergency_stair_pos = None
+        elevator_pos=None
+
         for floor_index in range(self.floors - 1):
             current_floor = self.layout[floor_index]
             next_floor = self.layout[floor_index + 1]
 
+            # Find eligible positions for normal stairs
             eligible_positions = [
                 (i, j)
                 for i in [0, self.rows - 1]
@@ -181,44 +228,121 @@ class Building:
             ]
 
             if not eligible_positions:
-                raise ValueError(f"No valid hallway positions for elevators/stairs on floor {floor_index}")
+                raise ValueError(f"No valid hallway positions for vertical connections on floor {floor_index}")
 
-            elevator_pos = random.choice(eligible_positions)
-            staircase_pos = random.choice(eligible_positions)
+            # Select positions for normal stairs and emergency stairs
+            normal_stair_pos = random.choice(eligible_positions)
+            if emergency_stair_pos is None:
+                emergency_stair_pos = random.choice(eligible_positions)
+            if elevator_pos is None:
+                elevator_pos = random.choice(eligible_positions)
+                
 
-            current_elevator_room = current_floor[elevator_pos[0]][elevator_pos[1]]
-            next_elevator_room = next_floor[elevator_pos[0]][elevator_pos[1]]
-            current_elevator_room.elevator(next_elevator_room)
-            next_elevator_room.elevator(current_elevator_room)
+            # Create and connect normal stairs
+            current_normal_stair = current_floor[normal_stair_pos[0]][normal_stair_pos[1]]
+            next_normal_stair = next_floor[normal_stair_pos[0]][normal_stair_pos[1]]
+            current_normal_stair.stairs(next_normal_stair, is_emergency=False)
+            next_normal_stair.stairs(current_normal_stair, is_emergency=False)
 
-            current_staircase_room = current_floor[staircase_pos[0]][staircase_pos[1]]
-            next_staircase_room = next_floor[staircase_pos[0]][staircase_pos[1]]
-            current_staircase_room.stairs(next_staircase_room)
-            next_staircase_room.stairs(current_staircase_room)
+            # Create and connect emergency stairs
+            current_emergency_stair = current_floor[emergency_stair_pos[0]][emergency_stair_pos[1]]
+            next_emergency_stair = next_floor[emergency_stair_pos[0]][emergency_stair_pos[1]]
+            current_emergency_stair.stairs(next_emergency_stair, is_emergency=True)
+            next_emergency_stair.stairs(current_emergency_stair, is_emergency=True)
 
-    def validate_layout(self):
+            # Add elevators (connect every floor)
+            current_elevator = current_floor[elevator_pos[0]][elevator_pos[1]]
+            next_elevator = next_floor[elevator_pos[0]][elevator_pos[1]]
+            current_elevator.elevator(next_elevator)
+            next_elevator.elevator(current_elevator)
+
+    def add_exits_and_connections(self):
+        """
+        Adds normal and emergency exits on the ground floor.
+        Ensures that emergency stairs connect directly to the emergency exit.
+        """
+        ground_floor = self.layout[0]
+
+        # Find eligible positions for exits
+        eligible_positions = [
+            (i, j)
+            for i in [0, self.rows - 1]
+            for j in range(self.cols)
+            if ground_floor[i][j] and ground_floor[i][j].room_type == "H"
+        ] + [
+            (i, j)
+            for i in range(self.rows)
+            for j in [0, self.cols - 1]
+            if ground_floor[i][j] and ground_floor[i][j].room_type == "H"
+        ]
+
+        if len(eligible_positions) < 3:
+            raise ValueError("Not enough eligible positions for exits.")
+
+        # Select positions for exits
+        normal_exit_pos = random.sample(eligible_positions, 2)
+        emergency_exit_pos = random.choice(eligible_positions)
+
+        # Place exits on the ground floor
+        for pos in normal_exit_pos:
+            self.layout[0][pos[0]][pos[1]].room_type = "N"  # Normal exit
+
+        self.layout[0][emergency_exit_pos[0]][emergency_exit_pos[1]].room_type = "E"  # Emergency exit
+
+
+    def update_room_connections(self):
         for floor_layout in self.layout:
-            self.ensure_hallway_connectivity(floor_layout)
+            for i in range(self.rows):
+                for j in range(self.cols):
+                    room = floor_layout[i][j]
+                    if room:
+                        # Check adjacent rooms
+                        for dx, dy in [(-1, 0), (1, 0), (0, -1), (0, 1)]:
+                            nx, ny = i + dx, j + dy
+                            if 0 <= nx < self.rows and 0 <= ny < self.cols:
+                                neighbor = floor_layout[nx][ny]
+                                if neighbor:
+                                    if room.room_type == "H":  # Hallway
+                                        room.connection(neighbor)
+                                    elif neighbor.room_type == "H":  # Store/Restroom to Hallway
+                                        room.connection(neighbor)
 
+    
     def display_building(self):
         for floor_index, floor_layout in enumerate(self.layout):
-            print(f"Floor {floor_index}:")
+            print(f"\n--- Floor {floor_index} ---")
             for row in floor_layout:
                 print(" ".join(room.room_type if room else "." for room in row))
-            print()
 
-            # Indicate elevators and staircases
-            print("Elevators:")
+            print("\nElevators:")
             for row in floor_layout:
                 for room in row:
                     if room and room.elevators:
-                        print(f"  Room at ({room.row}, {room.col}) -> Elevator to floors: {[f.row for f in room.elevators]}")
+                        connected_floors = [f.floor for f in room.elevators]
+                        print(f"  Room ({room.row}, {room.col}) -> Connected floors: {connected_floors}")
 
-            print("Staircases:")
+            print("\nEmegerncy_Staircases:")
+            for row in floor_layout:
+                for room in row:
+                    if room and room.emergency_staircases:
+                        connected_floors = "Emergency"
+                        print(f"  Room ({room.row}, {room.col}) -> Stair types: {connected_floors}")
+
+            print("\nStaircases:")
             for row in floor_layout:
                 for room in row:
                     if room and room.staircases:
-                        print(f"  Room at ({room.row}, {room.col}) -> Stairs to floors: {[f.row for f in room.staircases]}")
+                        connected_floors = "Normal"
+                        print(f"  Room ({room.row}, {room.col}) -> Stair types: {connected_floors}")
+
+
+            if floor_index == 0:  # Show exits only on the ground floor
+                print("\nExits:")
+                for row in floor_layout:
+                    for room in row:
+                        if room and room.room_type in {"N", "E"}:
+                            exit_type = "Normal" if room.room_type == "N" else "Emergency"
+                            print(f"  Exit ({room.row}, {room.col}) -> {exit_type}")
 
 
 # Example usage
