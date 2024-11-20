@@ -42,8 +42,8 @@ class OccupantAgent(Agent):
     async def go_to_exit(self):
         """Navega até a saída mais próxima."""
         exits = [
-            (room.row, room.col)
-            for floor in self.building.layout
+            (room.row, room.col, floor_index)
+            for floor_index, floor in enumerate(self.building.layout)
             for row in floor
             for room in row
             if room and room.room_type == "E"
@@ -51,21 +51,31 @@ class OccupantAgent(Agent):
         if not exits:
             print(f"{self.agent_name}: Não há saídas disponíveis no edifício.")
             return
-
-        current_floor = self.location.row
-        # Encontra a saída mais próxima no andar atual
+        
+        # Encontra a saída mais próxima considerando todos os pisos
         nearest_exit = min(
-            exits, key=lambda pos: abs(pos[0] - self.location.row) + abs(pos[1] - self.location.col)
+            exits,
+            key=lambda pos: abs(pos[0] - self.location.row) + abs(pos[1] - self.location.col) + abs(pos[2] - self.location.floor)
         )
-        target_room = self.building.layout[current_floor][nearest_exit[0]][nearest_exit[1]]
+        target_floor, target_row, target_col = nearest_exit[2], nearest_exit[0], nearest_exit[1]
+        target_room = self.building.layout[target_floor][target_row][target_col]
 
-        print(f"{self.agent_name} está indo para a saída mais próxima em ({nearest_exit[0]}, {nearest_exit[1]}).")
+        # Altera o andar, se necessário
+        if target_floor != self.location.floor:
+            if self.condition == "disabled" and not self.building.elevator_locked:
+                await self.use_elevator(target_floor)
+            else:
+                await self.use_stairs(target_floor)
+
+        # Navega até a saída no mesmo piso
+        print(f"{self.agent_name} está indo para a saída mais próxima em ({target_row}, {target_col}, andar {target_floor}).")
         while self.location != target_room:
             if not self.go_to_next_room(target_room):
                 print(f"{self.agent_name} está preso e não consegue alcançar a saída.")
                 return
             await asyncio.sleep(self.pace)
-        print(f"{self.agent_name} alcançou a saída em ({target_room.row}, {target_room.col}).")
+
+        print(f"{self.agent_name} alcançou a saída em ({target_room.row}, {target_room.col}, andar {target_floor}).")
         self.evacuated = True
         self.finish_time = time.time()
 
@@ -84,13 +94,30 @@ class OccupantAgent(Agent):
         elif current_col > target_col:
             next_col -= 1
         # Atualiza a localização
-        next_room = self.building.layout[self.location.row][next_row][next_col]
-        if next_room and next_room.room_type in {"H", "E"}:  # Move apenas para corredores ou saídas
-            self.location = next_room
-            print(f"{self.agent_name} moveu-se para a sala ({next_room.row}, {next_room.col}).")
-            return True
+        try:
+            next_room = self.building.layout[self.location.floor][next_row][next_col]
+            if next_room and next_room.room_type in {"H", "E"}:  # Move apenas para corredores ou saídas
+                self.location = next_room
+                print(f"{self.agent_name} moveu-se para a sala ({next_room.row}, {next_room.col}).")
+                return True
+        except IndexError:
+            pass
         return False
 
+    async def use_elevator(self, destination_floor):
+        """Usa o elevador para alcançar o andar de destino."""
+        print(f"{self.agent_name} está esperando pelo elevador no andar {self.location.floor}.")
+        await asyncio.sleep(4)  # Simula o tempo do elevador
+        self.location = self.building.layout[destination_floor][self.location.row][self.location.col]
+        print(f"{self.agent_name} chegou ao andar {destination_floor} pelo elevador.")
+
+    async def use_stairs(self, destination_floor):
+        """Usa as escadas para alcançar o andar de destino."""
+        print(f"{self.agent_name} está subindo as escadas para o andar {destination_floor}.")
+        await asyncio.sleep(2 * abs(destination_floor - self.location.floor))  # Simula o tempo para usar as escadas
+        self.location = self.building.layout[destination_floor][self.location.row][self.location.col]
+        print(f"{self.agent_name} chegou ao andar {destination_floor} pelas escadas.")
+
     async def setup(self):
-        print(f"{self.agent_name} está iniciando na sala ({self.location.row}, {self.location.col})...")
+        print(f"{self.agent_name} está iniciando na sala ({self.location.row}, {self.location.col}, andar {self.location.floor})...")
         self.add_behaviour(self.ListenForEmergencyBehaviour())
