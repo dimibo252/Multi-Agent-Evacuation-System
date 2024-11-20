@@ -1,23 +1,56 @@
-from OccupantAgent import OccupantAgent
-from BMSAgent import BMSAgent
-from EmergencyResponderAgent import EmergencyResponderAgent
+from Agents.OccupantAgent import OccupantAgent
+from Agents.BMSAgent import BMSAgent
+from Agents.EmergencyResponderAgent import EmergencyResponderAgent
 import asyncio
+import random
+import building
 
 async def main():
-    occupant_agent = OccupantAgent("occupant@localhost", "isiapassword")
-    bms_agent = BMSAgent("bms@localhost", "isiapassword")
-    responder_agent = EmergencyResponderAgent("responder@localhost", "isiapassword")
+    # Número de ocupantes a ser criado
+    num_occupants = random.randint(1, 10)
+    occupant_agents = []
+    occupied_locations = set()
+    for i in range(1, num_occupants + 1):
+        condition = "functional" if random.random() < 0.84 else "disabled"
+        while True:
+            # Cria uma sala inicial aleatória
+            agent = OccupantAgent(
+                jid=f"occupant{i}@localhost",
+                password="password",
+                agent_name=f"Agent {i}",
+                condition=condition,
+                building=building,
+            )
+            # Verifica se a localização é única
+            if agent.location not in occupied_locations:
+                occupied_locations.add(agent.location)
+                occupant_agents.append(agent)
+                break
+    cop_agent = EmergencyResponderAgent("cop@localhost", "isiapassword", role="cop")
+    fireman_agent = EmergencyResponderAgent("fireman@localhost", "isiapassword", role="fireman")
+    bms_agent = BMSAgent("bms@localhost", "isiapassword",num_occupants, "BMS Agent")
 
+    for agent in occupant_agents:
+        building.add_agent(agent)
+    building.add_emergency_agent(cop_agent)
+    building.add_emergency_agent(fireman_agent)
+    building.add_emergency_agent(bms_agent)
+   
+
+    for agent in occupant_agents:
+        await agent.start()
+    await cop_agent.start()
+    await fireman_agent.start()
     await bms_agent.start()
-    await responder_agent.start()
-    await asyncio.sleep(1)
-    await occupant_agent.start()
 
-    await asyncio.sleep(30)  # Run for 30 seconds for demonstration
+    await asyncio.sleep(40) 
 
-    await occupant_agent.stop()
+    for agent in occupant_agents:
+        await agent.stop()
+    await cop_agent.stop()
+    await fireman_agent.stop()
     await bms_agent.stop()
-    await responder_agent.stop()
+    await bms_agent.stop()
 
 if __name__ == "__main__":
     asyncio.run(main())
