@@ -1,18 +1,17 @@
 from spade.agent import Agent
 from spade.behaviour import CyclicBehaviour
-from spade.message import Message
 import asyncio
 import random
 import time
 from abuilding import Room, Building
+from BMSAgent import elevator_locked  
 
 class OccupantAgent(Agent):
-    def __init__(self, jid, password, agent_name, condition, building: Building, bms_agent):
+    def __init__(self, jid, password, agent_name, condition, building: Building):
         super().__init__(jid, password)
         self.agent_name = agent_name
         self.condition = condition  # "disabled" ou "functional"
         self.building = building  # Referência ao edifício
-        self.bms_agent = bms_agent  # Referência ao BMSAgent
         self.evacuated = False
         self.pace = 10 if condition == "disabled" else 1
         self.is_evacuated = False
@@ -20,7 +19,7 @@ class OccupantAgent(Agent):
         self.location = self.random_initial_location()  # Define a localização inicial
 
     def random_initial_location(self):
-        #Gera uma localização inicial aleatória em um corredor (`H`).
+        # Gera uma localização inicial aleatória em um corredor (`H`).
         available_rooms = [
             room
             for floor in self.building.layout
@@ -60,8 +59,8 @@ class OccupantAgent(Agent):
         target_room = self.building.layout[target_floor][target_row][target_col]
         # Verifica se está no mesmo piso
         if target_floor != self.location.floor:
-            # Verifica o estado do elevador através do BMS
-            if not self.bms_agent.elevator_locked:
+            # Verifica o estado do elevador através da variável importada
+            if not elevator_locked:
                 # Elevador funcional: Procura a transition room mais próxima (elevador ou escada)
                 transition_room = self.find_nearest_vertical_connection(includes_elevator=True)
             else:
