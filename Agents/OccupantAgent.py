@@ -4,7 +4,7 @@ import asyncio
 import random
 import time
 from abuilding import Room, Building
-from BMSAgent import elevator_locked  
+from BMSAgent import elevator_locked  # Importa a variável global de BMSAgent.py
 
 class OccupantAgent(Agent):
     def __init__(self, jid, password, agent_name, condition, building: Building):
@@ -14,7 +14,6 @@ class OccupantAgent(Agent):
         self.building = building  # Referência ao edifício
         self.evacuated = False
         self.pace = 10 if condition == "disabled" else 1
-        self.is_evacuated = False
         self.finish_time = None
         self.location = self.random_initial_location()  # Define a localização inicial
 
