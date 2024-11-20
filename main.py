@@ -34,7 +34,7 @@ async def main():
         building.add_agent(agent)
     building.add_emergency_agent(cop_agent)
     building.add_emergency_agent(fireman_agent)
-    building.add_emergency_agent(bms_agent)
+    building.add_bms_agent(bms_agent)
    
 
     for agent in occupant_agents:
