@@ -24,6 +24,10 @@ class EmergencyResponderAgent(Agent):
                     await self.agent.navigate_to_room(target_room)
                     print(f"{self.agent.role} responder is responding to fire in Room: {target_floor},{target_row},{target_col}.")
                     print(f"{self.agent.role} Fire at Room: {target_floor},{target_row},{target_col} extinguished.")
+                    #self.agent.environment.responses+=1
+                    #self.agent.environment.num_fires[0]+=1
+                    #room.is_on_fire = False
+                    #room.noted_fire = False
                 
                 elif txt.body.startswith("Earthquake") and self.agent.role == 'cop':
                     _, room_coords = txt.body.split("Room:")
@@ -32,6 +36,10 @@ class EmergencyResponderAgent(Agent):
                     await self.agent.navigate_to_room(target_room)
                     print(f"{self.agent.role.capitalize()} responder is responding to Earthquake")
                     print(f"{self.agent.role.capitalize()} Everyone at the building is safe")
+                    #self.agent.environment.responses+=1
+                    #self.agent.environment.num_earthquakes[0]+=1
+                    #room.is_damaged = False
+                    #room.noted_earthquake = False
                 
                 elif txt.body.startswith("Invasion") and self.agent.role == 'cop':
                     _, room_coords = txt.body.split("Room:")
@@ -40,6 +48,10 @@ class EmergencyResponderAgent(Agent):
                     await self.agent.navigate_to_room(target_room)
                     print(f"{self.agent.role} responder is responding to invasion in Room: {target_floor},{target_row},{target_col}.")
                     print(f"{self.agent.role} Invasion at Room: {target_floor},{target_row},{target_col} resolved.")
+                    #self.agent.environment.num_attacks[0]+=1
+                    #self.agent.environment.responses+=1
+                    #room.is_taken = False
+                    #room.noted_attack = False
 
     async def navigate_to_room(self, target_room):
         while self.location != target_room:
