@@ -27,7 +27,7 @@ class Room:
         self.fire = True
         for connection in self.connections:
             if random.random() < 0.05: #5% chance of fire in each connection
-                connection.fire()
+                connection.fires()
                 
     def connection(self, to_room):
         self.connections.append(to_room)
