@@ -6,11 +6,11 @@ from abuilding import Room, Building
 
 
 class EmergencyResponderAgent(Agent):
-    def __init__(self, jid, password, role, building: Building, bms_jid):
+    def __init__(self, jid, password, role, building: Building):
         super().__init__(jid, password)
         self.role = role  # "cop" ou "fireman"
         self.building = building  # Referência ao edifício
-        self.bms_jid = bms_jid  # JID do BMSAgent
+        self.bms_jid = "bms@localhost"
         self.location = self.building.layout[0][0][0]  # Começa no primeiro andar, primeira sala
 
     class EmergencyBehaviour(CyclicBehaviour):
