@@ -34,9 +34,13 @@ class OccupantAgent(Agent):
     class ListenForEmergencyBehaviour(CyclicBehaviour):
         async def run(self):
             alert = await self.receive(timeout=20)
-            if alert and "Emergency" in alert.body:
-                print(f"{self.agent.agent_name}: Emergency alert received.")
-                await self.agent.go_to_exit()
+            if not alert or "Room:" not in alert.body:
+                print(f"{self.agent.agent_name}: Mensagem de emergência mal formatada ou ausente.")
+                return
+
+            print(f"{self.agent.agent_name}: Emergency alert received.")
+            await self.agent.go_to_exit()
+
 
     async def go_to_exit(self):
         # Navega até a saída mais próxima.
