@@ -1,5 +1,5 @@
 from spade.agent import Agent
-from spade.behaviour import CyclicBehaviour
+from spade.behaviour import CyclicBehaviour, OneShotBehaviour
 from spade.message import Message
 import asyncio
 import random
@@ -42,13 +42,13 @@ class EmergencyAgent(Agent):
             msg = Message(to="bms@localhost")  # Replace with the actual BMS JID
             msg.set_metadata("performative", "inform")  # Inform the BMS
             msg.set_metadata("protocol", "emergency_alert")
-            msg.body = f"Emergency:{self.emergency_type}"
+            msg.body = f"Emergency:{self.agent.emergency_type}"
     
             if self.room:
-                msg.body += f",Location:{self.room.row},{self.room.col},{self.room.floor}"
-                print(f"EmergencyAgent: Sent {self.emergency_type} alert for room ({self.room.row}, {self.room.col}, Floor {self.room.floor})")
+                msg.body += f",Location:{self.agent.room.row},{self.agent.room.col},{self.agent.room.floor}"
+                print(f"EmergencyAgent: Sent {self.agent.emergency_type} alert for room ({self.agent.room.row}, {self.agent.room.col}, Floor {self.agent.room.floor})")
             else:
-                print(f"EmergencyAgent: Sent {self.emergency_type} alert.")
+                print(f"EmergencyAgent: Sent {self.agent.emergency_type} alert.")
     
             await self.send(msg)
 
