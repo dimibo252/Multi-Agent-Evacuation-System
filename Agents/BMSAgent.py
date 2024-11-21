@@ -1,121 +1,143 @@
 from spade.agent import Agent
-from spade.behaviour import CyclicBehaviour
+from spade.behaviour import CyclicBehaviour, OneShotBehaviour
 from spade.message import Message
 import asyncio
-from building import Building
+from abuilding import Building
 
 
 class BMSAgent(Agent):
     def __init__(self, jid, password, num_occupants, role, building: Building):
         super().__init__(jid, password)
         self.building = building
-        self.num_occupants = num_occupants  # Número de ocupantes a serem notificados
+        self.num_occupants = num_occupants  # Number of occupants to be notified
         self.elevator_locked = False
+        self.emergency_type = None
+        self.location = None
 
     class ReceiveEmergencyMessages(CyclicBehaviour):
         async def run(self):
-            """Recebe mensagens do EmergencyAgent e age conforme necessário."""
-            message = await self.receive(timeout=1)  # Aguarda mensagens
-            if message:
-                if "Emergency:" in message.body:
-                    # Processa o tipo de emergência e a localização
-                    emergency_data = message.body.split(",")
-                    emergency_type = emergency_data[0].split(":")[1]
-                    print(f"BMSAgent: Emergency received: {emergency_type}")
-                    location = None
-                    if len(emergency_data) > 1:
-                        location_data = emergency_data[1].split(":")[1].split(",")
-                        location = {
-                            "row": int(location_data[0]),
-                            "col": int(location_data[1]),
-                            "floor": int(location_data[2]),
-                        }
-                        print(f"BMSAgent: Location received: {location}")
+            """Receives messages from EmergencyAgent and processes them."""
+            message = await self.receive(timeout=1)  # Wait for messages
+            if message and "Emergency:" in message.body:
+                # Process the emergency type and location
+                emergency_data = message.body.split(",")
+                self.agent.emergency_type = emergency_data[0].split(":")[1]
+                print(f"BMSAgent: Received emergency: {self.agent.emergency_type}")
+                
+                self.agent.location = None
+                if len(emergency_data) > 1:
+                    location_data = emergency_data[1].split(":")[1].split(",")
+                    self.agent.location = {
+                        "row": int(location_data[0]),
+                        "col": int(location_data[1]),
+                        "floor": int(location_data[2]),
+                    }
+                    print(f"BMSAgent: Location received: {self.agent.location}")
+                
+                # Trigger the behavior to handle the emergency
+                self.agent.add_behaviour(self.agent.HandleEmergency())
 
-                    await self.agent.handle_emergency(emergency_type, location)
+    class NotifyOccupants(OneShotBehaviour):
+        def __init__(self, message_body):
+            super().__init__()
+            self.message_body = message_body
 
-    async def handle_emergency(self, emergency_type, location=None):
-        """Lida com emergências recebidas."""
-        if emergency_type == "Fire":
-            print("BMSAgent: Managing Fire.")
-            await self.lock_elevator()
-            fire_message = f"Fire detected. Evacuate immediately. Location: {location}" if location else "Fire detected. Evacuate immediately."
-            await self.notify_all_occupants(fire_message)
-            # Notifica o fireman
-            fireman_jid = "fireman@localhost"
-            fireman_message = Message(to=fireman_jid)
-            fireman_message.body = f"Emergency:{emergency_type},Location:{location['row']},{location['col']},{location['floor']}"
-            await self.send(fireman_message)
-            print(f"BMSAgent: Message sent to the fireman: {fireman_message.body}")
+        async def run(self):
+            """Notifies all occupants about the emergency."""
+            print(f"BMSAgent: Notifying occupants: {self.message_body}")
+            for i in range(1, self.agent.num_occupants + 1):
+                occupant_jid = f"occupant{i}@localhost"
+                occupant_message = Message(to=occupant_jid)
+                occupant_message.body = self.message_body
+                await self.send(occupant_message)
+                print(f"BMSAgent: Message sent to {occupant_jid}")
 
-        elif emergency_type == "Earthquake":
-            print("BMSAgent: Managing Earthquake.")
-            earthquake_message = f"Earthquake detected. Evacuate immediately. Location: {location}" if location else "Earthquake detected. Evacuate immediately."
-            await self.notify_all_occupants(earthquake_message)
-            # Notifica o responsável por terremotos
-            earthquake_responder_jid = "earthquake_responder@localhost"
-            responder_message = Message(to=earthquake_responder_jid)
-            responder_message.body = f"Emergency:{emergency_type},Location:{location['row']},{location['col']},{location['floor']}"
-            await self.send(responder_message)
-            print(f"BMSAgent: Message Sent to the earthquakes responsible: {responder_message.body}")
+    class NotifyResponder(OneShotBehaviour):
+        def __init__(self, responder_jid, responder_message):
+            super().__init__()
+            self.responder_jid = responder_jid
+            self.responder_message = responder_message
 
-        elif emergency_type == "Gas Leak":
-            print("BMSAgent: Managing Gas Leak.")
-            await self.lock_elevator()
-            gas_message = "Gas leak detected. Evacuate immediately."
-            await self.notify_all_occupants(gas_message)
-            # Notifica o responsável por vazamentos de gás
-            gas_responder_jid = "gas_responder@localhost"
-            responder_message = Message(to=gas_responder_jid)
-            responder_message.body = f"Emergency:{emergency_type}"
-            await self.send(responder_message)
-            print(f"BMSAgent: Message sent to the gas leaks responsible: {responder_message.body}")
+        async def run(self):
+            """Sends a message to the relevant responder."""
+            message = Message(to=self.responder_jid)
+            message.body = self.responder_message
+            await self.send(message)
+            print(f"BMSAgent: Message sent to {self.responder_jid}: {message.body}")
 
-        elif emergency_type == "Security Threat":
-            print("BMSAgent: Managing security threat.")
-            security_message = f"Security threat detected. Evacuate immediately. Location: {location}" if location else "Security threat detected. Evacuate immediately."
-            await self.notify_all_occupants(security_message)
-            # Notifica o responsável por segurança
-            security_responder_jid = "cop@localhost"
-            responder_message = Message(to=security_responder_jid)
-            responder_message.body = f"Emergency:{emergency_type},Location:{location['row']},{location['col']},{location['floor']}"
-            await self.send(responder_message)
-            print(f"BMSAgent: Message sent to the security responsible: {responder_message.body}")
+    class HandleEmergency(OneShotBehaviour):
+        async def run(self):
+            """Handles the current emergency."""
+            emergency_type = self.agent.emergency_type
+            location = self.agent.location
 
-        elif emergency_type == "Informatic Attack":
-            print("BMSAgent: Managing informatic attack.")
-            informatic_message = "Informatic attack ongoing. Systems compromised."
-            await self.notify_all_occupants(informatic_message)
-            # Notifica o responsável por ataques informáticos
-            informatic_responder_jid = "it_responder@localhost"
-            responder_message = Message(to=informatic_responder_jid)
-            responder_message.body = f"Emergency:{emergency_type}"
-            await self.send(responder_message)
-            print(f"BMSAgent: Message sent to the IT responsible: {responder_message.body}")
+            if emergency_type == "Fire":
+                print("BMSAgent: Managing fire.")
+                await self.agent.lock_elevator()
+                fire_message = (
+                    f"Fire detected. Evacuate immediately. Location: {location}" 
+                    if location 
+                    else "Fire detected. Evacuate immediately."
+                )
+                self.agent.add_behaviour(self.agent.NotifyOccupants(fire_message))
+                fireman_jid = "fireman@localhost"
+                fireman_message = f"Emergency:{emergency_type},Location:{location['row']},{location['col']},{location['floor']}"
+                self.agent.add_behaviour(self.agent.NotifyResponder(fireman_jid, fireman_message))
+
+            elif emergency_type == "Earthquake":
+                print("BMSAgent: Managing earthquake.")
+                earthquake_message = (
+                    f"Earthquake detected. Evacuate immediately. Location: {location}" 
+                    if location 
+                    else "Earthquake detected. Evacuate immediately."
+                )
+                self.agent.add_behaviour(self.agent.NotifyOccupants(earthquake_message))
+                responder_jid = "earthquake_responder@localhost"
+                responder_message = f"Emergency:{emergency_type},Location:{location['row']},{location['col']},{location['floor']}"
+                self.agent.add_behaviour(self.agent.NotifyResponder(responder_jid, responder_message))
+
+            elif emergency_type == "Gas Leak":
+                print("BMSAgent: Managing gas leak.")
+                await self.agent.lock_elevator()
+                gas_message = "Gas leak detected. Evacuate immediately."
+                self.agent.add_behaviour(self.agent.NotifyOccupants(gas_message))
+                responder_jid = "gas_responder@localhost"
+                responder_message = f"Emergency:{emergency_type}"
+                self.agent.add_behaviour(self.agent.NotifyResponder(responder_jid, responder_message))
+
+            elif emergency_type == "Security Threat":
+                print("BMSAgent: Managing security threat.")
+                security_message = (
+                    f"Security threat detected. Evacuate immediately. Location: {location}" 
+                    if location 
+                    else "Security threat detected. Evacuate immediately."
+                )
+                self.agent.add_behaviour(self.agent.NotifyOccupants(security_message))
+                responder_jid = "cop@localhost"
+                responder_message = f"Emergency:{emergency_type},Location:{location['row']},{location['col']},{location['floor']}"
+                self.agent.add_behaviour(self.agent.NotifyResponder(responder_jid, responder_message))
+
+            elif emergency_type == "Informatic Attack":
+                print("BMSAgent: Managing informatic attack.")
+                informatic_message = "Informatic attack ongoing. Systems compromised."
+                self.agent.add_behaviour(self.agent.NotifyOccupants(informatic_message))
+                responder_jid = "it_responder@localhost"
+                responder_message = f"Emergency:{emergency_type}"
+                self.agent.add_behaviour(self.agent.NotifyResponder(responder_jid, responder_message))
 
     async def lock_elevator(self):
-        """Tranca os elevadores."""
+        """Locks the elevators."""
         if not self.elevator_locked:
             self.elevator_locked = True
-            print("BMSAgent: Elevators blocked due to emergency.")
+            print("BMSAgent: Elevators locked due to emergency.")
 
     async def unlock_elevator(self):
-        """Destranca os elevadores."""
+        """Unlocks the elevators."""
         if self.elevator_locked:
             self.elevator_locked = False
-            print("BMSAgent: Elevators Unlocked.")
-
-    async def notify_all_occupants(self, message_body):
-        """Envia notificações para os ocupantes."""
-        print(f"BMSAgent: Notifying occupants: {message_body}")
-        for i in range(1, self.num_occupants + 1):
-            occupant_jid = f"occupant{i}@localhost"
-            occupant_message = Message(to=occupant_jid)
-            occupant_message.body = message_body
-            await self.send(occupant_message)
-            print(f"BMSAgent: Message sent to {occupant_jid}")
+            print("BMSAgent: Elevators unlocked.")
 
     async def setup(self):
-        """Configura os comportamentos do BMSAgent."""
-        print("BMSAgent started...")
+        """Sets up the behaviors for the BMSAgent."""
+        print("BMSAgent: Starting...")
         self.add_behaviour(self.ReceiveEmergencyMessages())
