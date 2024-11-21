@@ -14,7 +14,8 @@ class Room:
         self.emergency_staircases = []
         self.fire = False
         self.unavailable = False #for earthquakes or security threath, for example
-     
+        self.is_occupied = False 
+
     def security_threath(self):
         self.unavailable=True
             
@@ -50,6 +51,9 @@ class Building:
         self.add_vertical_connections()
         self.add_exits_and_connections()
         self.update_room_connections()
+        self.lock_doors = False
+        self.lock_elevators = False
+        self.lock_communications = False
 
     def generate_building_layout(self):
         layout = []
@@ -308,7 +312,6 @@ class Building:
                                     elif neighbor.room_type == "H":  # Store/Restroom to Hallway
                                         room.connection(neighbor)
 
-    
     def display_building(self):
         for floor_index, floor_layout in enumerate(self.layout):
             print(f"\n--- Floor {floor_index} ---")
