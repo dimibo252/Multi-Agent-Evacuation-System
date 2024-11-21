@@ -16,7 +16,6 @@ class OccupantAgent(Agent):
         self.pace = 10 if condition == "disabled" else 1
         self.finish_time = None
         self.location = self.random_initial_location()  # Define a localização inicial
-        self.bms_jid = "bms@localhost"  # Ajuste conforme necessário
 
     def random_initial_location(self):
         # Gera uma localização inicial aleatória em um corredor (`H`).
@@ -78,7 +77,7 @@ class OccupantAgent(Agent):
 
     async def check_elevator_availability(self, target_floor):
         # Solicita ao BMSAgent o estado do elevador.
-        message = Message(to=self.bms_jid)
+        message = Message(to="bms@localhost")
         message.body = "Elevator Request"
         await self.send(message)
         print(f"{self.agent_name}: Solicitando uso do elevador ao BMSAgent.")
