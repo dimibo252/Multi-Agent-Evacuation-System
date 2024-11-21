@@ -3,6 +3,7 @@ from spade.behaviour import CyclicBehaviour
 from spade.message import Message
 import asyncio
 import random
+from asyncio import Queue
 
 
 class EmergencyAgent(Agent):
@@ -54,29 +55,35 @@ class EmergencyAgent(Agent):
             self.start_informatic_attack()
         return self.emergency_type
 
+    class SendMessagesToBms(CyclicBehaviour):
+        async def run(self):
+            """Envia mensagens ao BMSAgent a partir da fila."""
+            if not self.agent.message_queue.empty():
+                message = await self.agent.message_queue.get()  # Obtém a próxima mensagem da fila
+                await self.send(message)
+                print(f"EmergencyAgent: Mensagem enviada ao BMSAgent: {message.body}")
+
     def send_emergency_to_bms(self, emergency_type, fire_room=None, earthquake_room=None, security_room=None):
         """
-        Envia uma mensagem ao BMSAgent com o tipo de emergência.
-        Para incêndios, inclui as coordenadas da sala em chamas.
+        Enfileira uma mensagem para envio ao BMSAgent.
         """
         msg = Message(to="bms@localhost")  # Envia diretamente ao BMSAgent
         if emergency_type == "Fire" and fire_room:
             # Inclui as coordenadas da sala no caso de incêndio
             msg.body = f"Emergency:{emergency_type},Location:{fire_room.row},{fire_room.col},{fire_room.floor}"
-            print(f"EmergencyAgent: Mensagem enviada ao BMSAgent sobre incêndio na sala ({fire_room.row}, {fire_room.col}, Floor {fire_room.floor}).")
+            print(f"EmergencyAgent: Mensagem enfileirada para BMSAgent sobre incêndio na sala ({fire_room.row}, {fire_room.col}, Floor {fire_room.floor}).")
         elif emergency_type == "Earthquake" and earthquake_room:
-            # Inclui as coordenadas da sala no caso de incêndio
             msg.body = f"Emergency:{emergency_type},Location:{earthquake_room.row},{earthquake_room.col},{earthquake_room.floor}"
-            print(f"EmergencyAgent: Mensagem enviada ao BMSAgent sobre terremoto na sala ({earthquake_room.row}, {earthquake_room.col}, Floor {earthquake_room.floor}).")
+            print(f"EmergencyAgent: Mensagem enfileirada para BMSAgent sobre terremoto na sala ({earthquake_room.row}, {earthquake_room.col}, Floor {earthquake_room.floor}).")
         elif emergency_type == "Security Threat" and security_room:
-            # Inclui as coordenadas da sala no caso de incêndio
             msg.body = f"Emergency:{emergency_type},Location:{security_room.row},{security_room.col},{security_room.floor}"
-            print(f"EmergencyAgent: Mensagem enviada ao BMSAgent sobre ameaça de segurança na sala ({security_room.row}, {security_room.col}, Floor {security_room.floor}).")
+            print(f"EmergencyAgent: Mensagem enfileirada para BMSAgent sobre ameaça de segurança na sala ({security_room.row}, {security_room.col}, Floor {security_room.floor}).")
         else:
             msg.body = f"Emergency:{emergency_type}"
-            print(f"EmergencyAgent: Mensagem enviada ao BMSAgent sobre emergência: {emergency_type}.")
+            print(f"EmergencyAgent: Mensagem enfileirada para BMSAgent sobre emergência: {emergency_type}.")
         
-        asyncio.create_task(self.send(msg))
+        # Adiciona a mensagem na fila
+        self.message_queue.put_nowait(msg)
 
     def start_informatic_attack(self):
         """Inicia um ataque informático em sistemas aleatórios do edifício."""
@@ -143,6 +150,7 @@ class EmergencyAgent(Agent):
         ]
 
     async def setup(self):
-        """Configura o EmergencyBehaviour para o agente."""
-        print("EmergencyAgent started.")
+        """Configura os comportamentos do agente."""
+        print("EmergencyAgent iniciado.")
         self.add_behaviour(self.EmergencyBehaviour())
+        self.add_behaviour(self.SendMessagesToBms())
