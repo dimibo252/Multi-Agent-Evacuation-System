@@ -7,7 +7,7 @@ WINDOW_HEIGHT = 800
 GRID_SIZE = 50  # Room size in pixels
 SIDEBAR_WIDTH = 300
 
-# Colors
+# Colors for various room types and agents
 COLORS = {
     "background": (30, 30, 30),
     "hallway": (200, 200, 200),
@@ -19,7 +19,8 @@ COLORS = {
     "emergency_exit": (128, 0, 128),
     "text": (255, 255, 255),
     "sidebar": (50, 50, 50),
-    "agent": (0, 255, 255),  # Cyan for agents
+    "agent_occupant": (0, 255, 255),  # Cyan for Occupants
+    "agent_responder": (255, 0, 0),  # Red for Emergency Responders
 }
 
 class PygameInterface:
@@ -28,7 +29,7 @@ class PygameInterface:
         Initialize the Pygame interface.
         Args:
             building: Instance of the Building class.
-            agents: List of agents with `location` attributes.
+            agents: List of agent objects with `location` attributes pointing to a Room.
         """
         self.building = building
         self.agents = agents
@@ -62,19 +63,22 @@ class PygameInterface:
 
     def draw_agents(self):
         """Draw agents as dots in their current rooms, handling multiple agents per room."""
-        agent_positions = {}  # Dictionary to track agents in each room
+        agent_positions = {"occupants": {}, "responders": {}}  # Dictionary to track agents by type
 
-        # Group agents by their locations
+        # Group agents by their types and locations (rooms)
         for agent in self.agents:
-            if agent.location and agent.location[0] == self.current_floor:
-                floor, row, col = agent.location
+            if agent.location and agent.location.floor == self.current_floor:
+                floor = agent.location.floor
+                row = agent.location.row
+                col = agent.location.col
                 key = (row, col)
-                if key not in agent_positions:
-                    agent_positions[key] = []
-                agent_positions[key].append(agent)
+                if isinstance(agent, OccupantAgent):
+                    agent_positions["occupants"].setdefault(key, []).append(agent)
+                elif isinstance(agent, EmergencyResponderAgent):
+                    agent_positions["responders"].setdefault(key, []).append(agent)
 
-        # Draw agents in each room
-        for (row, col), agents in agent_positions.items():
+        # Draw Occupant agents as dots
+        for (row, col), agents in agent_positions["occupants"].items():
             x = col * GRID_SIZE + GRID_SIZE // 2
             y = row * GRID_SIZE + GRID_SIZE // 2
 
@@ -82,7 +86,18 @@ class PygameInterface:
             for index, agent in enumerate(agents):
                 offset_x = (index % 3 - 1) * GRID_SIZE // 6  # Offset in X direction
                 offset_y = (index // 3 - 1) * GRID_SIZE // 6  # Offset in Y direction
-                pygame.draw.circle(self.screen, COLORS["agent"], (x + offset_x, y + offset_y), GRID_SIZE // 8)
+                pygame.draw.circle(self.screen, COLORS["agent_occupant"], (x + offset_x, y + offset_y), GRID_SIZE // 8)
+
+        # Draw Emergency Responder agents as dots
+        for (row, col), agents in agent_positions["responders"].items():
+            x = col * GRID_SIZE + GRID_SIZE // 2
+            y = row * GRID_SIZE + GRID_SIZE // 2
+
+            # Spread out dots slightly for multiple agents in the same room
+            for index, agent in enumerate(agents):
+                offset_x = (index % 3 - 1) * GRID_SIZE // 6  # Offset in X direction
+                offset_y = (index // 3 - 1) * GRID_SIZE // 6  # Offset in Y direction
+                pygame.draw.circle(self.screen, COLORS["agent_responder"], (x + offset_x, y + offset_y), GRID_SIZE // 8)
 
     def draw_sidebar(self):
         """Draw the sidebar with controls and information."""
@@ -154,20 +169,25 @@ class PygameInterface:
 
 
 # Example Usage
-class MockAgent:
+class OccupantAgent:
     def __init__(self, name, location):
         self.name = name
-        self.location = location  # (floor, row, col)
+        self.location = location  # Location is now a Room object
+
+class EmergencyResponderAgent:
+    def __init__(self, name, location):
+        self.name = name
+        self.location = location  # Location is now a Room object
 
 if __name__ == "__main__":
     # Create a sample building
     building = Building(floors=3, rows=5, cols=5, building_type="shopping_mall")
 
-    # Create mock agents
+    # Create mock agents with Room object location
     agents = [
-        MockAgent("agent1", (0, 2, 2)),  # On floor 0
-        MockAgent("agent2", (0, 2, 2)),  # On floor 1
-        MockAgent("agent3", (2, 1, 1)),  # On floor 2
+        OccupantAgent("occupant1", building.layout[0][2][2]),  # On floor 0, Room (2,2)
+        EmergencyResponderAgent("responder1", building.layout[1][3][4]),  # On floor 1, Room (3,4)
+        OccupantAgent("occupant2", building.layout[2][1][1]),  # On floor 2, Room (1,1)
     ]
 
     # Create and start the interface
