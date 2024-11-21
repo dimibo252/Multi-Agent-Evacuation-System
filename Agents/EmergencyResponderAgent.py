@@ -8,9 +8,8 @@ from abuilding import Room, Building
 class EmergencyResponderAgent(Agent):
     def __init__(self, jid, password, role, building: Building):
         super().__init__(jid, password)
-        self.role = role  # "cop" ou "fireman"
+        self.role = role  # "cop", "fireman", "earthquake_responder", "gas_responder", "it_responder"
         self.building = building  # Referência ao edifício
-        self.bms_jid = "bms@localhost"
         self.location = self.building.layout[0][0][0]  # Começa no primeiro andar, primeira sala
 
     class EmergencyBehaviour(CyclicBehaviour):
@@ -24,38 +23,51 @@ class EmergencyResponderAgent(Agent):
                     await self.agent.navigate_to_room(target_room)
                     print(f"{self.agent.role} responder is responding to fire in Room: {target_floor},{target_row},{target_col}.")
                     print(f"{self.agent.role} Fire at Room: {target_floor},{target_row},{target_col} extinguished.")
-                    #self.agent.environment.responses+=1
-                    #self.agent.environment.num_fires[0]+=1
-                    #room.is_on_fire = False
-                    #room.noted_fire = False
-                
-                elif txt.body.startswith("Earthquake") and self.agent.role == 'cop':
+                    await self.agent.send_resolution_status("Fire", target_room)
+
+                elif txt.body.startswith("Earthquake") and self.agent.role == 'fireman':
                     _, room_coords = txt.body.split("Room:")
                     target_floor, target_row, target_col = map(int, room_coords.split(","))
                     target_room = self.agent.building.layout[target_floor][target_row][target_col]
                     await self.agent.navigate_to_room(target_room)
                     print(f"{self.agent.role.capitalize()} responder is responding to Earthquake")
-                    print(f"{self.agent.role.capitalize()} Everyone at the building is safe")
-                    #self.agent.environment.responses+=1
-                    #self.agent.environment.num_earthquakes[0]+=1
-                    #room.is_damaged = False
-                    #room.noted_earthquake = False
-                
-                elif txt.body.startswith("Invasion") and self.agent.role == 'cop':
+                    print(f"{self.agent.role.capitalize()} Everyone at the room is safe")
+                    await self.agent.send_resolution_status("Earthquake", target_room)
+
+                elif txt.body.startswith("Security Threat") and self.agent.role == 'cop':
                     _, room_coords = txt.body.split("Room:")
                     target_floor, target_row, target_col = map(int, room_coords.split(","))
                     target_room = self.agent.building.layout[target_floor][target_row][target_col]
                     await self.agent.navigate_to_room(target_room)
-                    print(f"{self.agent.role} responder is responding to invasion in Room: {target_floor},{target_row},{target_col}.")
-                    print(f"{self.agent.role} Invasion at Room: {target_floor},{target_row},{target_col} resolved.")
-                    #self.agent.environment.num_attacks[0]+=1
-                    #self.agent.environment.responses+=1
-                    #room.is_taken = False
-                    #room.noted_attack = False
+                    print(f"{self.agent.role} responder is responding to security threat in Room: {target_floor},{target_row},{target_col}.")
+                    print(f"{self.agent.role} Security threat in Room: {target_floor},{target_row},{target_col} resolved.")
+                    await self.agent.send_resolution_status("Security Threat", target_room)
+
+                # Additional conditions for gas leaks or informatic attacks could be handled similarly
+                elif txt.body.startswith("Gas Leak") and self.agent.role == 'gas_responder':
+                    print(f"{self.agent.role.capitalize()} responder is addressing gas leak.")
+                    await self.agent.send_resolution_status("Gas Leak", None)
+
+                elif txt.body.startswith("Informatic Attack") and self.agent.role == 'it_responder':
+                    print(f"{self.agent.role.capitalize()} responder is addressing informatic attack.")
+                    await self.agent.send_resolution_status("Informatic Attack", None)
+
+    async def send_resolution_status(self, emergency_type, room=None):
+        """Envio de mensagem ao BMS indicando que a emergência foi resolvida."""
+        msg = Message(to="bms@localhost")
+        if emergency_type in ["Fire", "Earthquake", "Security Threat"]:
+            if room:
+                msg.body = f"Emergency:{emergency_type} resolved, Location: {room.row},{room.col},{room.floor}"
+                print(f"EmergencyResponder: Mensagem enviada ao BMS sobre {emergency_type} resolvido na sala ({room.row},{room.col},{room.floor}).")
+        else:
+            msg.body = f"Emergency:{emergency_type} resolved"
+            print(f"EmergencyResponder: Mensagem enviada ao BMS sobre {emergency_type} resolvido.")
+        
+        await self.send(msg)
 
     async def check_elevator_availability(self, target_floor):
         # Solicita ao BMSAgent o estado do elevador.
-        message = Message(to=self.bms_jid)
+        message = Message(to="bms@localhost")
         message.body = "Elevator Request"
         await self.send(message)
         print(f"{self.role.capitalize()} responder: Requesting elevator status from BMSAgent.")
