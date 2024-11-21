@@ -3,14 +3,14 @@ from spade.behaviour import CyclicBehaviour
 from spade.message import Message
 import asyncio
 from abuilding import Room, Building
-from BMSAgent import elevator_locked
 
 
 class EmergencyResponderAgent(Agent):
-    def __init__(self, jid, password, role, building: Building):
+    def __init__(self, jid, password, role, building: Building, bms_jid):
         super().__init__(jid, password)
         self.role = role  # "cop" ou "fireman"
         self.building = building  # Referência ao edifício
+        self.bms_jid = bms_jid  # JID do BMSAgent
         self.location = self.building.layout[0][0][0]  # Começa no primeiro andar, primeira sala
 
     class EmergencyBehaviour(CyclicBehaviour):
@@ -53,31 +53,36 @@ class EmergencyResponderAgent(Agent):
                     #room.is_taken = False
                     #room.noted_attack = False
 
+    async def check_elevator_availability(self, target_floor):
+        # Solicita ao BMSAgent o estado do elevador.
+        message = Message(to=self.bms_jid)
+        message.body = "Elevator Request"
+        await self.send(message)
+        print(f"{self.role.capitalize()} responder: Requesting elevator status from BMSAgent.")
+        reply = await self.receive(timeout=5)  # Aguarda resposta
+        if reply and reply.body == "Elevator Unlocked":
+            print(f"{self.role.capitalize()} responder: Elevator available. Using elevator.")
+            includes_elevator = True
+        else:
+            print(f"{self.role.capitalize()} responder: Elevator unavailable. Using stairs.")
+            includes_elevator = False
+        return self.find_nearest_vertical_connection(includes_elevator)
+
     async def navigate_to_room(self, target_room):
         while self.location != target_room:
             if self.location.floor != target_room.floor:
-                # Precisa mudar de andar
-                if not elevator_locked:
-                    transition_room = self.find_nearest_vertical_connection(includes_elevator=True)
-                else:
-                    transition_room = self.find_nearest_vertical_connection(includes_elevator=False)
-                
+                transition_room = await self.check_elevator_availability(target_room.floor)
                 if not transition_room:
-                    print(f"{self.role.capitalize()} responder: Não foi possível encontrar um meio de transição.")
+                    print(f"{self.role.capitalize()} responder: No transition available.")
                     return
                 await self.navigate_to_room(transition_room)
-                # Usar elevador ou escada para mudar de andar
-                if transition_room.elevators and not elevator_locked:
+                if transition_room.elevators:
                     await self.use_elevator(target_room.floor)
                 elif transition_room.staircases:
                     await self.use_stairs(target_room.floor)
-                else:
-                    print(f"{self.role.capitalize()} responder: Erro na transição de andar.")
-                    return
             else:
-                # Navegar no mesmo andar
                 if not self.go_to_next_room(target_room):
-                    print(f"{self.role.capitalize()} responder: Não foi possível alcançar a sala {target_room.row},{target_room.col}.")
+                    print(f"{self.role.capitalize()} responder: Couldn't reach Room {target_room.row},{target_room.col}.")
                     return
             await asyncio.sleep(1)
 
@@ -110,7 +115,7 @@ class EmergencyResponderAgent(Agent):
             if room and (room.staircases or (room.elevators if includes_elevator else False))
         ]
         if not options:
-            print(f"{self.role.capitalize()} responder: Não há opções de transição disponíveis.")
+            print(f"{self.role.capitalize()} responder: No transition options available.")
             return None
         return min(
             options,
