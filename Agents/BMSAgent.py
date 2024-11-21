@@ -40,39 +40,40 @@ class BMSAgent(Agent):
                         if room:
                             # Detectar incêndio
                             if room.fire:
-                                print(f"Fire detected in room ({room.row}, {room.col})!")
+                                print(f"Fire detected in room ({room.row}, {room.col}, {room.floor})!")
                                 await self.agent.notify_emergency(room, "Fire")
                             
                             # Detectar terremoto
                             if room.unavailable:  # Para situações como terremotos
-                                print(f"Earthquake damage in room ({room.row}, {room.col})!")
+                                print(f"Earthquake damage in room ({room.row}, {room.col}, {room.flor})!")
                                 await self.agent.notify_emergency(room, "Earthquake")
 
                             # Detectar invasão
                             if room.room_type == "H" and random.random() < 0.01:  # Exemplo de invasão aleatória
-                                print(f"Invasion detected in room ({room.row}, {room.col})!")
+                                print(f"Invasion detected in room ({room.row}, {room.col}, {room.floor})!")
                                 await self.agent.notify_emergency(room, "Invasion")
 
-    async def notify_emergency(self, room, disaster_type):
-        """
-        Notifica ocupantes e agentes de emergência sobre o desastre detectado.
-        """
-        message_body = f"Emergency: {disaster_type} in room ({room.row}, {room.col})!"
-        print(f"Sending notification: {message_body}")
+        async def notify_emergency(self, room, disaster_type):
+            """
+            Notifica ocupantes e agentes de emergência sobre o desastre detectado.
+            """
+            message_body = f"{disaster_type} Room: {room.floor},{room.row},{room.col}"
+            print(f"Sending notification: {message_body}")
 
-        # Notificar ocupantes
-        for occupant in self.building.agents:  # Supõe-se que 'agents' seja uma lista de ocupantes
-            if occupant:
-                occupant_message = Message(to=occupant.jid)
-                occupant_message.body = message_body
-                await self.send(occupant_message)
+            # Notificar ocupantes
+            for occupant in self.building.agents:
+                if occupant:
+                    occupant_message = Message(to=occupant.jid)
+                    occupant_message.body = message_body
+                    await self.send(occupant_message)
 
-        # Notificar agentes de emergência
-        for emergency_agent in self.building.emergency_agents:  # Supõe-se que 'emergency_agents' seja a lista correta
-            if emergency_agent:
-                emergency_message = Message(to=emergency_agent.jid)
-                emergency_message.body = message_body
-                await self.send(emergency_message)
+            # Notificar agentes de emergência
+            for emergency_agent in self.building.emergency_agents:
+                if emergency_agent:
+                    emergency_message = Message(to=emergency_agent.jid)
+                    emergency_message.body = message_body
+                    await self.send(emergency_message)
+
 
     async def setup(self):
         """
