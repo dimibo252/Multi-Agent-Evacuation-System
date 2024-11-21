@@ -10,7 +10,8 @@ class EmergencyAgent(Agent):
         super().__init__(jid, password)
         self.building = building  # Reference to the building
         self.emergency_type = None
-        self.hacked_systems = []  # Track systems affected by informatic attacks
+        self.hacked_systems = [] # Track systems affected by informatic attacks
+        self.room = None
 
     class EmergencyBehaviour(CyclicBehaviour):
         async def run(self):
@@ -32,6 +33,26 @@ class EmergencyAgent(Agent):
             elif rn < 0.03:
                 await self.agent.start_earthquake()
 
+    class SenderBehaviour(OneShotBehaviour):
+        async def run(self):
+            await asyncio.sleep(3)
+            """
+            Sends an emergency message to the BMSAgent with the emergency type and location.
+            """
+            msg = Message(to="bms@localhost")  # Replace with the actual BMS JID
+            msg.set_metadata("performative", "inform")  # Inform the BMS
+            msg.set_metadata("protocol", "emergency_alert")
+            msg.body = f"Emergency:{self.emergency_type}"
+    
+            if self.room:
+                msg.body += f",Location:{self.room.row},{self.room.col},{self.room.floor}"
+                print(f"EmergencyAgent: Sent {self.emergency_type} alert for room ({self.room.row}, {self.room.col}, Floor {self.room.floor})")
+            else:
+                print(f"EmergencyAgent: Sent {self.emergency_type} alert.")
+    
+            await self.send(msg)
+
+
     async def start_emergency(self):
         """Starts an emergency by selecting a random type."""
         emergencies = {
@@ -43,8 +64,6 @@ class EmergencyAgent(Agent):
         }
 
         self.emergency_type = random.choices(list(emergencies.keys()), weights=emergencies.values(), k=1)[0]
-
-        await self.send_emergency_to_bms(self.emergency_type)
 
         if self.emergency_type == "Fire":
             await self.start_fire()
@@ -59,28 +78,10 @@ class EmergencyAgent(Agent):
 
         return self.emergency_type
 
-    async def send_emergency_to_bms(self, emergency_type, room=None):
-        """
-        Sends an emergency message to the BMSAgent with the emergency type and location.
-        """
-        msg = Message(to="bms@localhost")  # Replace with the actual BMS JID
-        msg.set_metadata("performative", "inform")  # Inform the BMS
-        msg.set_metadata("protocol", "emergency_alert")
-        msg.body = f"Emergency:{emergency_type}"
-
-        if room:
-            msg.body += f",Location:{room.row},{room.col},{room.floor}"
-            print(f"EmergencyAgent: Sent {emergency_type} alert for room ({room.row}, {room.col}, Floor {room.floor})")
-        else:
-            print(f"EmergencyAgent: Sent {emergency_type} alert.")
-
-        await self.send(msg)
-
     async def start_informatic_attack(self):
         """Starts an informatic attack on random building systems."""
         systems = ["doors", "communication", "elevators"]
         self.hacked_systems = random.sample(systems, k=random.randint(1, len(systems)))
-        await self.send_emergency_to_bms("Informatic Attack")
         for system in self.hacked_systems:
             if system == "doors":
                 self.building.lock_doors = True
@@ -106,7 +107,7 @@ class EmergencyAgent(Agent):
         if unoccupied_rooms:
             fire_room = random.choice(unoccupied_rooms)
             fire_room.fires()  # Call the method from `Room`
-            await self.send_emergency_to_bms("Fire", fire_room)
+            self.room=fire_room
             print(f"Fire started in room ({fire_room.row}, {fire_room.col}, Floor {fire_room.floor})")
 
     async def start_earthquake(self):
@@ -116,7 +117,6 @@ class EmergencyAgent(Agent):
                 for room in row:
                     if room:
                         room.earthquake()
-        await self.send_emergency_to_bms("Earthquake")
         print("Earthquake damage applied to all rooms.")
 
     async def start_security_threat(self):
@@ -125,7 +125,6 @@ class EmergencyAgent(Agent):
         if unoccupied_rooms:
             security_room = random.choice(unoccupied_rooms)
             security_room.security_threath()
-            await self.send_emergency_to_bms("Security Threat", security_room)
             print(f"Security threat initiated in room ({security_room.row}, {security_room.col}, Floor {security_room.floor})")
 
     def get_unoccupied_rooms(self, room_type=None):
@@ -144,3 +143,4 @@ class EmergencyAgent(Agent):
         """Sets up the EmergencyBehaviour for the agent."""
         print("EmergencyAgent started.")
         self.add_behaviour(self.EmergencyBehaviour())
+        self.add_behaviour(self.SenderBehaviour())
