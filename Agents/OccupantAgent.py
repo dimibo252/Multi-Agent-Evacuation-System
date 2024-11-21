@@ -1,10 +1,10 @@
 from spade.agent import Agent
 from spade.behaviour import CyclicBehaviour
+from spade.message import Message
 import asyncio
 import random
 import time
 from abuilding import Room, Building
-from BMSAgent import elevator_locked  # Importa a variável global de BMSAgent.py
 
 class OccupantAgent(Agent):
     def __init__(self, jid, password, agent_name, condition, building: Building):
@@ -16,6 +16,7 @@ class OccupantAgent(Agent):
         self.pace = 10 if condition == "disabled" else 1
         self.finish_time = None
         self.location = self.random_initial_location()  # Define a localização inicial
+        self.bms_jid = "bms@localhost"  # Ajuste conforme necessário
 
     def random_initial_location(self):
         # Gera uma localização inicial aleatória em um corredor (`H`).
@@ -49,42 +50,45 @@ class OccupantAgent(Agent):
         if not exits:
             print(f"{self.agent_name}: Não há saídas disponíveis no edifício.")
             return
-        # Encontra a saída mais próxima considerando todos os pisos
         nearest_exit = min(
             exits,
             key=lambda pos: abs(pos[0] - self.location.row) + abs(pos[1] - self.location.col) + abs(pos[2] - self.location.floor)
         )
         target_floor, target_row, target_col = nearest_exit[2], nearest_exit[0], nearest_exit[1]
         target_room = self.building.layout[target_floor][target_row][target_col]
-        # Verifica se está no mesmo piso
         if target_floor != self.location.floor:
-            # Verifica o estado do elevador através da variável importada
-            if not elevator_locked:
-                # Elevador funcional: Procura a transition room mais próxima (elevador ou escada)
-                transition_room = self.find_nearest_vertical_connection(includes_elevator=True)
-            else:
-                # Elevador bloqueado: Procura apenas escadas
-                transition_room = self.find_nearest_vertical_connection(includes_elevator=False)
+            transition_room = await self.check_elevator_availability(target_floor)
             if transition_room:
                 await self.navigate_to_room(transition_room)
-                # Decide o meio de transição com base no tipo da transition_room
                 if transition_room.elevators:
                     await self.use_elevator(target_floor)
                 elif transition_room.staircases:
                     await self.use_stairs(target_floor)
-                else:
-                    print(f"{self.agent_name}: Erro - Transition room inválida.")
             else:
                 print(f"{self.agent_name}: Não foi possível encontrar uma maneira de mudar de piso.")
-        # Navegar para a saída no piso correto
         print(f"{self.agent_name} está indo para a saída mais próxima em ({target_row}, {target_col}, andar {target_floor}).")
         await self.navigate_to_room(target_room)
         print(f"{self.agent_name} alcançou a saída em ({target_room.row}, {target_room.col}, andar {target_floor}).")
         self.evacuated = True
         self.finish_time = time.time()
 
+    async def check_elevator_availability(self, target_floor):
+        # Solicita ao BMSAgent o estado do elevador.
+        message = Message(to=self.bms_jid)
+        message.body = "Elevator Request"
+        await self.send(message)
+        print(f"{self.agent_name}: Solicitando uso do elevador ao BMSAgent.")
+        reply = await self.receive(timeout=5)  # Aguarda resposta
+        if reply and reply.body == "Elevator Unlocked":
+            print(f"{self.agent_name}: Elevador disponível. Usando elevador.")
+            includes_elevator = True
+        else:
+            print(f"{self.agent_name}: Elevador indisponível. Usando escadas.")
+            includes_elevator = False
+        return self.find_nearest_vertical_connection(includes_elevator)
+
     def find_nearest_vertical_connection(self, includes_elevator=True):
-        # Encontra a transition room mais próxima (escada ou elevador, dependendo da configuração)."""
+        # Encontra a transition room mais próxima (escada ou elevador).
         current_floor = self.building.layout[self.location.floor]
         options = [
             room
@@ -103,7 +107,6 @@ class OccupantAgent(Agent):
         return nearest
 
     async def navigate_to_room(self, target_room):
-        # Navega para uma sala específica no mesmo piso.
         while self.location != target_room:
             if not self.go_to_next_room(target_room):
                 print(f"{self.agent_name} está preso e não consegue alcançar o destino ({target_room.row}, {target_room.col}).")
@@ -111,7 +114,6 @@ class OccupantAgent(Agent):
             await asyncio.sleep(self.pace)
 
     def go_to_next_room(self, target_room):
-        # Move-se para a próxima sala mais próxima do alvo. 
         current_row, current_col = self.location.row, self.location.col
         target_row, target_col = target_room.row, target_room.col
         next_row, next_col = current_row, current_col
@@ -134,14 +136,12 @@ class OccupantAgent(Agent):
         return False
 
     async def use_elevator(self, destination_floor):
-        #Usa o elevador para alcançar o andar de destino.
         print(f"{self.agent_name} está esperando pelo elevador no andar {self.location.floor}.")
         await asyncio.sleep(4)  # Simula o tempo do elevador
         self.location = self.building.layout[destination_floor][self.location.row][self.location.col]
         print(f"{self.agent_name} chegou ao andar {destination_floor} pelo elevador.")
 
     async def use_stairs(self, destination_floor):
-        #Usa as escadas para alcançar o andar de destino.
         print(f"{self.agent_name} está subindo as escadas para o andar {destination_floor}.")
         await asyncio.sleep(2 * abs(destination_floor - self.location.floor))  # Simula o tempo para usar as escadas
         self.location = self.building.layout[destination_floor][self.location.row][self.location.col]
