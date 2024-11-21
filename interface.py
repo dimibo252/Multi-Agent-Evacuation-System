@@ -72,9 +72,9 @@ class PygameInterface:
                 row = agent.location.row
                 col = agent.location.col
                 key = (row, col)
-                if isinstance(agent, OccupantAgent):
+                if agent.type=="Occupant":
                     agent_positions["occupants"].setdefault(key, []).append(agent)
-                elif isinstance(agent, EmergencyResponderAgent):
+                elif agent.type=="Responder":
                     agent_positions["responders"].setdefault(key, []).append(agent)
 
         # Draw Occupant agents as dots
@@ -167,29 +167,3 @@ class PygameInterface:
                 self.current_floor = i
                 break
 
-
-# Example Usage
-class OccupantAgent:
-    def __init__(self, name, location):
-        self.name = name
-        self.location = location  # Location is now a Room object
-
-class EmergencyResponderAgent:
-    def __init__(self, name, location):
-        self.name = name
-        self.location = location  # Location is now a Room object
-
-if __name__ == "__main__":
-    # Create a sample building
-    building = Building(floors=3, rows=5, cols=5, building_type="shopping_mall")
-
-    # Create mock agents with Room object location
-    agents = [
-        OccupantAgent("occupant1", building.layout[0][2][2]),  # On floor 0, Room (2,2)
-        EmergencyResponderAgent("responder1", building.layout[1][3][4]),  # On floor 1, Room (3,4)
-        OccupantAgent("occupant2", building.layout[2][1][1]),  # On floor 2, Room (1,1)
-    ]
-
-    # Create and start the interface
-    interface = PygameInterface(building, agents)
-    interface.run()
