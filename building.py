@@ -39,7 +39,7 @@ class Room:
             self.emergency_staircases.append(to_room)
         else:
             self.staircases.append(to_room)
-
+    
 class Building:
     def __init__(self, floors, rows, cols, building_type="shopping_mall"):
         self.floors = floors
@@ -62,11 +62,12 @@ class Building:
     def place_rooms(self, floor_layout,floor):
         for i in range(self.rows):
             for j in range(self.cols):
-                if random.random() < 0.6:  # 60% chance for Hallway
+                random_number=random.random()
+                if random_number < 0.6:  # 60% chance for Hallway
                     floor_layout[i][j] = Room("H", i, j,floor)
-                elif random.random() < 0.8:  # 20% chance for Store
+                elif random_number < 0.9:  # 30% chance for Store
                     floor_layout[i][j] = Room("S", i, j,floor)
-                else:  # 20% chance for Restroom
+                else:  # 10% chance for Restroom
                     floor_layout[i][j] = Room("R", i, j,floor)
 
         self.ensure_store_restroom_access(floor_layout,floor)
@@ -302,7 +303,7 @@ class Building:
                             if 0 <= nx < self.rows and 0 <= ny < self.cols:
                                 neighbor = floor_layout[nx][ny]
                                 if neighbor:
-                                    if room.room_type == "H":  # Hallway
+                                    if room.room_type == "H" or "E" or "N":  # Hallway
                                         room.connection(neighbor)
                                     elif neighbor.room_type == "H":  # Store/Restroom to Hallway
                                         room.connection(neighbor)
@@ -348,3 +349,5 @@ class Building:
 # Example usage
 building = Building(floors=3, rows=5, cols=5)
 building.display_building()
+room=building.layout[0][0][0]
+print(room.connections)
